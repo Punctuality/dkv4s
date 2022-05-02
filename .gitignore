@@ -1,0 +1,13 @@
+# Scala specific
+target
+*.class
+
+# Idea specific
+*.iml
+*.ipr
+*.iws
+.idea
+out
+
+# MacOS Specific
+.DS_Store
