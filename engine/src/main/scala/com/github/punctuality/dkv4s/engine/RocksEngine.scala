@@ -42,7 +42,7 @@ final class RocksEngine[F[_]: Sync](underlying: RocksDB) {
 
   def flush(awaited: Boolean): F[Unit] =
     nativeResource(Sync[F].delay(new FlushOptions().setWaitForFlush(awaited))).use(options =>
-      Sync[F].delay(underlying.flush(options))
+      Sync[F].blocking(underlying.flush(options))
     )
 
   val backupResource: Resource[F, BackupEngine] = for {
@@ -52,17 +52,17 @@ final class RocksEngine[F[_]: Sync](underlying: RocksDB) {
   } yield engine
 
   def backup(flushBeforeBackup: Boolean): F[Unit] =
-    backupResource.use(be => Sync[F].delay(be.createNewBackup(underlying, flushBeforeBackup)))
+    backupResource.use(be => Sync[F].blocking(be.createNewBackup(underlying, flushBeforeBackup)))
   def getBackups: F[List[BackupInfo]] =
-    backupResource.use(be => Sync[F].delay(be.getBackupInfo.asScala))
+    backupResource.use(be => Sync[F].blocking(be.getBackupInfo.asScala.toList))
 
   // TODO Not tested
   def restoreDB(backupId: Int): F[Unit] = for {
-    dbDir <- Sync[F].delay(underlying.getLiveFiles().files.asScala)
+    dbDir <- Sync[F].blocking(underlying.getLiveFiles().files.asScala)
       .map(_.head)
       .map(path => path.take(path.lastIndexOf('/')))
     _ <- backupResource.use(be =>
-      Sync[F].delay( be.restoreDbFromBackup(backupId, dbDir, dbDir, new RestoreOptions(true)))
+      Sync[F].blocking(be.restoreDbFromBackup(backupId, dbDir, dbDir, new RestoreOptions(true)))
     )
   } yield ()
 
@@ -74,5 +74,8 @@ final class RocksEngine[F[_]: Sync](underlying: RocksDB) {
 object RocksEngine {
   def apply[F[_] : Sync](underlying: RocksDB): RocksEngine[F] = new RocksEngine(underlying)
 
-  // TODO Add easier constructors
+  def mkDB[F[_]: Sync](path: String, options: Options, ttl: Boolean = false): Resource[F, RocksDB] = {
+    Resource.eval(Sync[F].blocking(RocksDB.loadLibrary())) >>
+      nativeResource(Sync[F].blocking(if (ttl) TtlDB.open(options, path) else RocksDB.open(options, path)))
+  }
 }

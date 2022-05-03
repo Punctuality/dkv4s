@@ -1,7 +1,10 @@
 package com.github.punctuality.dkv4s.engine.codec
 
 import cats.Functor
+import cats.effect.Sync
 import cats.syntax.functor._
+
+import java.nio.charset.StandardCharsets
 
 
 trait Decoder[F[_], A] {
@@ -15,4 +18,7 @@ object Decoder {
     override def map[A, B](fa: Decoder[F, A])(f: A => B): Decoder[F, B] =
       (bytes: Array[Byte]) => fa.decode(bytes).map(_.map(f))
   }
+
+  implicit def stringDec[F[_]: Sync]: Decoder[F, String] =
+    (bytes: Array[Byte]) => Sync[F].delay(Option(bytes).map(new String(_, StandardCharsets.UTF_8)))
 }
