@@ -14,7 +14,8 @@ object Encoder {
 
   implicit def contravariant[F[_]]: Contravariant[Encoder[F, *]] =
     new Contravariant[Encoder[F, *]] {
-      override def contramap[A, B](fa: Encoder[F, A])(f: B => A): Encoder[F, B] = (data: B) => fa.encode(f(data))
+      override def contramap[A, B](fa: Encoder[F, A])(f: B => A): Encoder[F, B] = (data: B) =>
+        fa.encode(f(data))
     }
 
   implicit def stringEnc[F[_]: Sync]: Encoder[F, String] =
