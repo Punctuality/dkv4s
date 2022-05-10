@@ -1,9 +1,8 @@
 package com.github.punctuality.dkv4s.raft.node
 
 import com.github.punctuality.dkv4s.raft.model.{LogEntry, Node, PersistedState}
-import com.github.punctuality.dkv4s.raft.protocol
-import com.github.punctuality.dkv4s.raft.protocol.{Action, AnnounceLeader, AppendEntries, AppendEntriesResponse, ClusterConfiguration, LogState, ReplicateLog, RequestForVote, StoreState, VoteRequest, VoteResponse}
-import com.github.punctuality.raft.protocol._
+
+import com.github.punctuality.dkv4s.raft.protocol._
 
 case class CandidateNode(currentNode: Node,
                          currentTerm: Long,
@@ -20,10 +19,8 @@ case class CandidateNode(currentNode: Node,
     val actions: List[ReplicateLog] =
       otherNodes.map(n => ReplicateLog(n, currentTerm, logState.lastLogIndex + 1)).toList
 
-    (
-      LeaderNode(currentNode, currentTerm, matchIndex, nextIndex),
-      StoreState :: AnnounceLeader(currentNode, resetPrevious = false) :: actions
-    )
+    LeaderNode(currentNode, currentTerm, matchIndex, nextIndex) ->
+      (StoreState :: AnnounceLeader(currentNode, resetPrevious = false) :: actions)
   }
 
   override def onElectionTimer(logState: LogState,
@@ -38,15 +35,12 @@ case class CandidateNode(currentNode: Node,
 
     if (config.members.size == 1) announceLeader(otherNodes, logState)
     else {
-      (
-        this.copy(
-          currentTerm   = electionTerm,
-          lastTerm      = lastTerm_,
-          votedFor      = Some(currentNode),
-          votedReceived = Set(currentNode)
-        ),
-        StoreState :: actions
-      )
+      this.copy(
+        currentTerm   = electionTerm,
+        lastTerm      = lastTerm_,
+        votedFor      = Some(currentNode),
+        votedReceived = Set(currentNode)
+      ) -> (StoreState :: actions)
     }
   }
 
@@ -62,12 +56,13 @@ case class CandidateNode(currentNode: Node,
         .contains(msg.nodeId)))
 
     if (logOK && termOK) {
-      (
-        FollowerNode(currentNode, msg.term, Some(msg.nodeId), None),
-        (VoteResponse(currentNode, msg.term, voteGranted = true), List(StoreState))
-      )
+      FollowerNode(currentNode, msg.term, Some(msg.nodeId), None) -> (VoteResponse(
+        currentNode,
+        msg.term,
+        voteGranted = true
+      ) -> List(StoreState))
     } else {
-      (this, (VoteResponse(currentNode, currentTerm, voteGranted = false), List.empty))
+      this -> (VoteResponse(currentNode, currentTerm, voteGranted = false) -> List.empty)
     }
   }
 
@@ -79,10 +74,10 @@ case class CandidateNode(currentNode: Node,
     val quorumSize     = (config.members.size + 1) / 2
 
     if (msg.term > currentTerm)
-      (FollowerNode(currentNode, msg.term), List(StoreState))
+      FollowerNode(currentNode, msg.term) -> List(StoreState)
     else if (msg.term == currentTerm && msg.voteGranted && votedReceived_.size >= quorumSize)
       announceLeader(config.members.filterNot(_ == currentNode), logState)
-    else (this.copy(votedReceived = votedReceived_), List.empty)
+    else this.copy(votedReceived = votedReceived_) -> List.empty
   }
 
   override def onEntries(logState: LogState,
@@ -91,113 +86,70 @@ case class CandidateNode(currentNode: Node,
                          localPrvLogEntry: Option[LogEntry]
   ): (NodeState, (AppendEntriesResponse, List[Action])) =
     if (msg.term < currentTerm) {
-      (
-        this,
-        (
-          protocol.AppendEntriesResponse(
-            currentNode,
-            currentTerm,
-            msg.prevLogIndex,
-            success = false
-          ),
-          List.empty
-        )
-      )
+      this -> (AppendEntriesResponse(
+        currentNode,
+        currentTerm,
+        msg.prevLogIndex,
+        success = false
+      ) -> List.empty)
     } else if (msg.term > currentTerm) {
 
       val nextState = FollowerNode(currentNode, msg.term, currentLeader = Some(msg.leaderId))
       val actions   = List(StoreState, AnnounceLeader(msg.leaderId, resetPrevious = false))
 
       if (msg.prevLogIndex > 0 && localPrvLogEntry.isEmpty)
-        (
-          nextState,
-          (
-            protocol.AppendEntriesResponse(
-              currentNode,
-              msg.term,
-              msg.prevLogIndex,
-              success = false
-            ),
-            actions
-          )
-        )
+        nextState -> (AppendEntriesResponse(
+          currentNode,
+          msg.term,
+          msg.prevLogIndex,
+          success = false
+        ) -> actions)
       else if (localPrvLogEntry.isDefined && localPrvLogEntry.get.term != msg.prevLogTerm)
-        (
-          nextState,
-          (
-            protocol.AppendEntriesResponse(
-              currentNode,
-              msg.term,
-              msg.prevLogIndex,
-              success = false
-            ),
-            actions
-          )
-        )
+        nextState -> (AppendEntriesResponse(
+          currentNode,
+          msg.term,
+          msg.prevLogIndex,
+          success = false
+        ) -> actions)
       else
-        (
-          nextState,
-          (
-            protocol.AppendEntriesResponse(
-              currentNode,
-              msg.term,
-              msg.prevLogIndex + msg.entries.length,
-              success = true
-            ),
-            actions
-          )
-        )
+        nextState -> (AppendEntriesResponse(
+          currentNode,
+          msg.term,
+          msg.prevLogIndex + msg.entries.length,
+          success = true
+        ) -> actions)
     } else {
 
       val nextState = FollowerNode(currentNode, msg.term, currentLeader = Some(msg.leaderId))
       val actions   = List(StoreState, AnnounceLeader(msg.leaderId, resetPrevious = false))
 
       if (msg.prevLogIndex > 0 && localPrvLogEntry.isEmpty)
-        (
-          nextState,
-          (
-            protocol.AppendEntriesResponse(
-              currentNode,
-              msg.term,
-              msg.prevLogIndex,
-              success = false
-            ),
-            actions
-          )
-        )
+        nextState -> (AppendEntriesResponse(
+          currentNode,
+          msg.term,
+          msg.prevLogIndex,
+          success = false
+        ) -> actions)
       else if (localPrvLogEntry.isDefined && localPrvLogEntry.get.term != msg.prevLogTerm) {
-        (
-          nextState,
-          (
-            protocol.AppendEntriesResponse(
-              currentNode,
-              msg.term,
-              msg.prevLogIndex,
-              success = false
-            ),
-            actions
-          )
-        )
+        nextState -> (AppendEntriesResponse(
+          currentNode,
+          msg.term,
+          msg.prevLogIndex,
+          success = false
+        ) -> actions)
       } else
-        (
-          nextState,
-          (
-            protocol.AppendEntriesResponse(
-              currentNode,
-              msg.term,
-              msg.prevLogIndex + msg.entries.length,
-              success = true
-            ),
-            actions
-          )
-        )
+        nextState -> (AppendEntriesResponse(
+          currentNode,
+          msg.term,
+          msg.prevLogIndex + msg.entries.length,
+          success = true
+        ) -> actions)
     }
 
   override def onEntriesResp(logState: LogState,
                              cluster: ClusterConfiguration,
                              msg: AppendEntriesResponse
-  ): (NodeState, List[Action]) =
-    (this, List.empty)
+  ): (NodeState, List[Action]) = this -> List.empty
 
   override def onReplicateLog(config: ClusterConfiguration): List[Action] =
     List.empty
@@ -211,13 +163,10 @@ case class CandidateNode(currentNode: Node,
   override def onSnapshotInstalled(logState: LogState,
                                    cluster: ClusterConfiguration
   ): (NodeState, AppendEntriesResponse) =
-    (
-      this,
-      protocol.AppendEntriesResponse(
-        currentNode,
-        currentTerm,
-        logState.lastAppliedIndex,
-        success = false
-      )
+    this -> AppendEntriesResponse(
+      currentNode,
+      currentTerm,
+      logState.lastAppliedIndex,
+      success = false
     )
 }

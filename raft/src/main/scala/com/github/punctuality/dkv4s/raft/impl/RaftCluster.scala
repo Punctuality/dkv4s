@@ -7,7 +7,6 @@ import com.github.punctuality.dkv4s.raft.model.{Configuration, LogCompactionPoli
 import com.github.punctuality.dkv4s.raft.rpc.{RpcClientBuilder, RpcServerBuilder}
 import com.github.punctuality.dkv4s.raft.storage.{StateMachine, Storage}
 import com.github.punctuality.dkv4s.raft.util.Logger
-import com.github.punctuality.raft._
 
 object RaftCluster {
 

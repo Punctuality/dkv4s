@@ -8,11 +8,10 @@ import cats.syntax.functor._
 import cats.syntax.traverse._
 import cats.{Monad, MonadThrow}
 import com.github.punctuality.dkv4s.raft.model.{Command, LogEntry, Node, Snapshot}
-import com.github.punctuality.dkv4s.raft.protocol.{AppendEntries, AppendEntriesResponse, InstallSnapshot, VoteRequest, VoteResponse}
+import com.github.punctuality.dkv4s.raft.protocol._
 import com.github.punctuality.dkv4s.raft.rpc.{RpcClient, RpcClientBuilder}
 import com.github.punctuality.dkv4s.raft.service.{ErrorLogging, RpcClientManager}
 import com.github.punctuality.dkv4s.raft.util.Logger
-import com.github.punctuality.raft.protocol._
 
 class RpcClientManagerImpl[F[_]: MonadThrow: RpcClientBuilder: Logger](
   val clientsRef: Ref[F, Map[Node, RpcClient[F]]],

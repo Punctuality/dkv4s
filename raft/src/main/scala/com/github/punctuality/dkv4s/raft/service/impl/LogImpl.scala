@@ -7,13 +7,11 @@ import cats.syntax.flatMap._
 import cats.syntax.functor._
 import cats.syntax.traverse._
 import cats.syntax.applicativeError._
-import com.github.punctuality.dkv4s.raft.{model, protocol}
-import com.github.punctuality.dkv4s.raft.model.{ClusterConfigurationCommand, Command, LogCompactionPolicy, LogEntry, Node, ReadCommand, Snapshot, WriteCommand}
+import com.github.punctuality.dkv4s.raft.model._
 import com.github.punctuality.dkv4s.raft.protocol.{AppendEntries, LogState}
 import com.github.punctuality.dkv4s.raft.service.{ClusterConfigStorage, Log}
 import com.github.punctuality.dkv4s.raft.storage.{LogStorage, SnapshotStorage, StateMachine}
 import com.github.punctuality.dkv4s.raft.util.Logger
-import com.github.punctuality.raft.model
 
 import scala.collection.concurrent.TrieMap
 
@@ -63,7 +61,7 @@ class LogImpl[F[_]: MonadCancel[*[_], Throwable]: Logger](
         if (lastIndex > 0) logStorage.get(lastIndex).map(_.map(_.term))
         else Monad[F].pure(None)
       commitIndex <- getCommitIndex
-    } yield protocol.LogState(lastIndex, lastTerm, commitIndex)
+    } yield LogState(lastIndex, lastTerm, commitIndex)
 
   def get(index: Long): F[Option[LogEntry]] =
     logStorage.get(index)
@@ -83,7 +81,7 @@ class LogImpl[F[_]: MonadCancel[*[_], Throwable]: Logger](
       entries     <- (nextIndex to lastIndex).toList.traverse(i => logStorage.get(i).map(_.get))
       prevLogIndex = lastEntry.map(_.index).getOrElse(0L)
       prevLogTerm  = lastEntry.map(_.term).getOrElse(0L)
-    } yield protocol.AppendEntries(leaderId, term, prevLogIndex, prevLogTerm, commitIndex, entries)
+    } yield AppendEntries(leaderId, term, prevLogIndex, prevLogTerm, commitIndex, entries)
 
   def append[T](term: Long, command: Command[T], deferred: Deferred[F, T]): F[LogEntry] =
     transactional {
@@ -108,6 +106,7 @@ class LogImpl[F[_]: MonadCancel[*[_], Throwable]: Logger](
         appliedIndex <- getCommitIndex
         _            <- truncateInconsistentLogs(entries, leaderPrevLogIndex, lastIndex)
         _            <- putEntries(entries, leaderPrevLogIndex, lastIndex)
+        _            <- Logger[F].trace(s"Commit index: $appliedIndex | Entries: $entries")
         committed    <- (appliedIndex + 1 to leaderCommit).toList.traverse(commit)
         // FIXME Consider applying without waiting for new heartbeat️
         _ <- if (committed.nonEmpty) compactLogs() else Monad[F].unit
@@ -131,11 +130,11 @@ class LogImpl[F[_]: MonadCancel[*[_], Throwable]: Logger](
                          leaderPrevLogIndex: Long,
                          logLastIndex: Long
   ): F[Unit] = {
-    val logEntries = if ((leaderPrevLogIndex + entries.length) > logLastIndex) {
-      val start = logLastIndex - leaderPrevLogIndex
-      // TODO improve list performance
-      (start until entries.length).map(i => entries(i.toInt)).toList
-    } else List.empty
+    val logEntries =
+      if ((leaderPrevLogIndex + entries.length) > logLastIndex)
+        entries.drop((logLastIndex - leaderPrevLogIndex).toInt)
+      else List.empty
+
     Logger[F].trace(s"Putting entries $logEntries to log storage") >>
       logEntries.traverse(entry => logStorage.put(entry.index, entry)).void
   }
@@ -216,7 +215,7 @@ class LogImpl[F[_]: MonadCancel[*[_], Throwable]: Logger](
       _        <- Logger[F].trace("Starting to take snapshot")
       snapshot <- stateMachine.takeSnapshot
       config   <- clusterConfigStorage.getClusterConfiguration
-      _        <- snapshotStorage.saveSnapshot(model.Snapshot(snapshot._1, snapshot._2, config))
+      _        <- snapshotStorage.saveSnapshot(Snapshot(snapshot._1, snapshot._2, config))
       _        <- Logger[F].trace(s"Snapshot is stored $snapshot")
       _        <- Logger[F].trace(s"Deleting logs before ${snapshot._1}")
       _        <- logStorage.deleteBefore(snapshot._1)

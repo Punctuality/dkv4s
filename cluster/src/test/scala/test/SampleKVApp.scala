@@ -13,10 +13,13 @@ import com.github.punctuality.dkv4s.raft.util.Logger
 import com.github.punctuality.dkv4s.raft.util.console.ConsoleLogger
 
 import scala.concurrent.duration._
+import scala.util.Random
 
 object SampleKVApp extends IOApp {
 
-  private val nodeCount = 3
+  private def pickRandom[A](seq: Seq[A]): A = seq(new Random().between(0, seq.size))
+
+  private val nodeCount = 9
   private val nodes     = (1 to nodeCount).toList.map(i => Node("localhost", 8880 + i))
   private val configs =
     nodes.map(node =>
@@ -28,7 +31,7 @@ object SampleKVApp extends IOApp {
       )
     )
 
-  private val entriesCount = 2
+  private val entriesCount = 1000
   private val entries      = (1 to entriesCount).toList.map(i => s"key$i" -> s"value$i")
 
   override def run(args: List[String]): IO[ExitCode] =
@@ -52,13 +55,13 @@ object SampleKVApp extends IOApp {
               )
             )
           _ <- entries.traverse { case (key, value) =>
-                 clusters.head.execute(SetCommand(key, value))
+                 pickRandom(clusters).execute(SetCommand(key, value))
                }
           _ <- IO(println("💥💥💥 Set commands were executed"))
           _ <- IO.sleep((configs.head.heartbeatIntervalMillis * 1.5).millis)
           _ <- IO(println("💥💥💥 Retrieving results..."))
           allResults <-
-            entries.traverse { case (key, _) =>
+            (entries.take(5) ++ entries.takeRight(5)).traverse { case (key, _) =>
               clusters.traverse(_.execute(GetCommand(key)))
             }
           _ <- IO(println(s"💥💥💥 Result of the get commands are:\n${allResults.mkString(",\n")}"))
@@ -67,7 +70,7 @@ object SampleKVApp extends IOApp {
 
   //noinspection SameParameterValue
   private def makeCluster(name: String, config: Configuration): Resource[IO, Cluster[IO]] = {
-    implicit val logger: Logger[IO]                               = ConsoleLogger[IO](name, ConsoleLogger.Level.Trace)
+    implicit val logger: Logger[IO]                               = ConsoleLogger[IO](name, ConsoleLogger.Level.Debug)
     implicit val commandSer: ProtoSerializer[Command[_]]          = JavaProtoSerializer.anySerObject
     implicit val configSer: ProtoSerializer[ClusterConfiguration] = JavaProtoSerializer.anySerObject
     implicit val objectSer: ProtoSerializer[Any]                  = JavaProtoSerializer.anySerObject

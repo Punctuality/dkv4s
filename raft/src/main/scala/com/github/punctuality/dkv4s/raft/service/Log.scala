@@ -1,11 +1,9 @@
 package com.github.punctuality.dkv4s.raft.service
 
 import cats.effect.Deferred
-import com.github.punctuality.dkv4s.raft.model.{Command, LogCompactionPolicy, LogEntry, Node, ReadCommand, Snapshot}
+import com.github.punctuality.dkv4s.raft.model._
 import com.github.punctuality.dkv4s.raft.protocol.{AppendEntries, LogState}
-import com.github.punctuality.dkv4s.raft.storage.{LogStorage, SnapshotStorage, StateMachine}
-import com.github.punctuality.raft._
-import com.github.punctuality.raft.protocol._
+import com.github.punctuality.dkv4s.raft.storage._
 
 /** Log entity. Stores events, manages state, applies commands
   */

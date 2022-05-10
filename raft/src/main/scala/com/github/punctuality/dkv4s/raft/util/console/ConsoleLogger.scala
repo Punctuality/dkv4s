@@ -17,7 +17,7 @@ case class ConsoleLogger[F[_]: Console: Monad: Clock](name: String,
   import ConsoleLogger.Level._
 
   private def procLevel(opLevel: ConsoleLogger.Level)(op: => F[Unit]): F[Unit] =
-    if (opLevel.value > loggingLevel.value) ().pure[F] else op
+    if (opLevel.value > loggingLevel.value) Monad[F].unit else op
 
   private def logMsg(
     opLevel: ConsoleLogger.Level

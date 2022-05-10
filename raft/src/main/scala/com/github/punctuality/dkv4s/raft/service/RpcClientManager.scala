@@ -1,8 +1,7 @@
 package com.github.punctuality.dkv4s.raft.service
 
-import com.github.punctuality.dkv4s.raft.model.{Command, LogEntry, Node, Snapshot}
-import com.github.punctuality.dkv4s.raft.protocol.{AppendEntries, AppendEntriesResponse, InstallSnapshot, VoteRequest, VoteResponse}
-import com.github.punctuality.raft.protocol._
+import com.github.punctuality.dkv4s.raft.model._
+import com.github.punctuality.dkv4s.raft.protocol._
 
 trait RpcClientManager[F[_]] {
 

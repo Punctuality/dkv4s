@@ -14,8 +14,6 @@ trait LogStorage[F[_]] {
   /** Get [[LogEntry]] by it's index
     * @param index index of the log
     * @return Log entry [[LogEntry]] or None
-    *
-    * TODO Improve this (do not return null)
     */
   def get(index: Long): F[Option[LogEntry]]
 

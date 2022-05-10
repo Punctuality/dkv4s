@@ -9,10 +9,9 @@ import com.github.punctuality.dkv4s.raft.Raft
 import com.github.punctuality.dkv4s.raft.model.{Configuration, LogCompactionPolicy, Node}
 import com.github.punctuality.dkv4s.raft.node.{FollowerNode, LeaderNode, NodeState}
 import com.github.punctuality.dkv4s.raft.rpc.RpcClientBuilder
-import com.github.punctuality.dkv4s.raft.service.impl.{ClusterConfigStorageImpl, LeaderAnnouncerImpl, LogImpl, LogPropagatorImpl, RpcClientManagerImpl}
+import com.github.punctuality.dkv4s.raft.service.impl._
 import com.github.punctuality.dkv4s.raft.storage.{StateMachine, Storage}
 import com.github.punctuality.dkv4s.raft.util.Logger
-import com.github.punctuality.raft.service.impl._
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration

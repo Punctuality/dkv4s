@@ -1,11 +1,10 @@
 package com.github.punctuality.dkv4s.raft.rpc.grpc.transform
 
 import com.github.punctuality.dkv4s.raft.model.{Command, LogEntry, Node, Snapshot}
-import com.github.punctuality.dkv4s.raft.protocol.{AppendEntries, AppendEntriesResponse, ClusterConfiguration, InstallSnapshot, VoteRequest, VoteResponse}
+import com.github.punctuality.dkv4s.raft.protocol._
 import com.github.punctuality.dkv4s.raft.rpc.grpc.serializer.ProtoSerializer
 import io.scalaland.chimney._
 import io.scalaland.chimney.dsl._
-import com.github.punctuality.raft.protocol._
 import com.google.protobuf.ByteString
 import raft.rpc
 

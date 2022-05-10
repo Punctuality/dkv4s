@@ -1,9 +1,7 @@
 package com.github.punctuality.dkv4s.raft.node
 
 import com.github.punctuality.dkv4s.raft.model.{LogEntry, Node, PersistedState}
-import com.github.punctuality.dkv4s.raft.protocol
-import com.github.punctuality.dkv4s.raft.protocol.{Action, AnnounceLeader, AppendEntries, AppendEntriesResponse, ClusterConfiguration, LogState, ResetLeaderAnnouncer, StoreState, VoteRequest, VoteResponse}
-import com.github.punctuality.raft.protocol._
+import com.github.punctuality.dkv4s.raft.protocol._
 
 case class FollowerNode(currentNode: Node,
                         currentTerm: Long,
@@ -25,19 +23,6 @@ case class FollowerNode(currentNode: Node,
                              config: ClusterConfiguration,
                              msg: VoteRequest
   ): (NodeState, (VoteResponse, List[Action])) = {
-    if (msg.term < currentTerm) {
-      (this, VoteResponse(currentNode, msg.term, voteGranted = false))
-    } else if (votedFor.isEmpty || votedFor.contains(msg.nodeId)) {
-      if (
-        msg.lastLogIndex >= logState.lastLogIndex && msg.lastLogTerm >= logState.lastLogTerm
-          .getOrElse(0L)
-      ) {
-        (VoteResponse(currentNode, msg.term, voteGranted = true), List(StoreState))
-      } else {
-        (this, (VoteResponse(currentNode, msg.term, voteGranted = false)))
-      }
-    }
-
     val myLogTerm = logState.lastLogTerm.getOrElse(0L)
     val logOK =
       (msg.lastLogTerm > myLogTerm) || (msg.lastLogTerm == myLogTerm && msg.lastLogIndex >= logState.lastLogIndex)
@@ -46,19 +31,20 @@ case class FollowerNode(currentNode: Node,
         .contains(msg.nodeId)))
 
     if (logOK && termOK)
-      (
-        this.copy(currentTerm = msg.term, votedFor = Some(msg.nodeId)),
-        (VoteResponse(currentNode, msg.term, voteGranted = true), List(StoreState))
-      )
+      this.copy(currentTerm = msg.term, votedFor = Some(msg.nodeId)) -> (VoteResponse(
+        currentNode,
+        msg.term,
+        voteGranted = true
+      ) -> List(StoreState))
     else
-      (this, (VoteResponse(currentNode, currentTerm, voteGranted = false), List.empty))
+      this -> (VoteResponse(currentNode, currentTerm, voteGranted = false) -> List.empty)
   }
 
   override def onVoteResponse(logState: LogState,
                               config: ClusterConfiguration,
                               msg: VoteResponse
   ): (NodeState, List[Action]) =
-    (this, List.empty)
+    this -> List.empty
 
   override def onEntries(logState: LogState,
                          config: ClusterConfiguration,
@@ -66,7 +52,7 @@ case class FollowerNode(currentNode: Node,
                          localPrevLogEntry: Option[LogEntry]
   ): (NodeState, (AppendEntriesResponse, List[Action])) =
     if (msg.term < currentTerm) {
-      this -> (protocol.AppendEntriesResponse(
+      this -> (AppendEntriesResponse(
         currentNode,
         currentTerm,
         msg.prevLogIndex,
@@ -84,21 +70,21 @@ case class FollowerNode(currentNode: Node,
             List(StoreState, AnnounceLeader(msg.leaderId, resetPrevious = true))
 
         if (msg.prevLogIndex > 0 && localPrevLogEntry.isEmpty)
-          nextState -> (protocol.AppendEntriesResponse(
+          nextState -> (AppendEntriesResponse(
             currentNode,
             msg.term,
             msg.prevLogIndex,
             success = false
           ) -> actions)
         else if (localPrevLogEntry.isDefined && localPrevLogEntry.get.term != msg.prevLogTerm)
-          nextState -> (protocol.AppendEntriesResponse(
+          nextState -> (AppendEntriesResponse(
             currentNode,
             msg.term,
             msg.prevLogIndex,
             success = false
           ) -> actions)
         else
-          nextState -> (protocol.AppendEntriesResponse(
+          nextState -> (AppendEntriesResponse(
             currentNode,
             msg.term,
             msg.prevLogIndex + msg.entries.length,
@@ -119,21 +105,21 @@ case class FollowerNode(currentNode: Node,
             )
 
         if (msg.prevLogIndex > 0 && localPrevLogEntry.isEmpty)
-          nextState -> (protocol.AppendEntriesResponse(
+          nextState -> (AppendEntriesResponse(
             currentNode,
             msg.term,
             msg.prevLogIndex,
             success = false
           ) -> actions)
         else if (localPrevLogEntry.isDefined && localPrevLogEntry.get.term != msg.prevLogTerm) {
-          nextState -> (protocol.AppendEntriesResponse(
+          nextState -> (AppendEntriesResponse(
             currentNode,
             msg.term,
             msg.prevLogIndex,
             success = false
           ) -> actions)
         } else
-          nextState -> (protocol.AppendEntriesResponse(
+          nextState -> (AppendEntriesResponse(
             currentNode,
             msg.term,
             msg.prevLogIndex + msg.entries.length,
@@ -145,8 +131,7 @@ case class FollowerNode(currentNode: Node,
   override def onEntriesResp(logState: LogState,
                              cluster: ClusterConfiguration,
                              msg: AppendEntriesResponse
-  ): (NodeState, List[Action]) =
-    (this, List.empty)
+  ): (NodeState, List[Action]) = this -> List.empty
 
   override def onReplicateLog(config: ClusterConfiguration): List[Action] =
     List.empty
@@ -160,13 +145,10 @@ case class FollowerNode(currentNode: Node,
   override def onSnapshotInstalled(logState: LogState,
                                    config: ClusterConfiguration
   ): (NodeState, AppendEntriesResponse) =
-    (
-      this,
-      protocol.AppendEntriesResponse(
-        currentNode,
-        currentTerm,
-        logState.lastLogIndex - 1,
-        success = true
-      )
+    this -> AppendEntriesResponse(
+      currentNode,
+      currentTerm,
+      logState.lastLogIndex - 1,
+      success = true
     )
 }

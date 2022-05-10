@@ -31,7 +31,6 @@ class KvStateMachine(lastIndex: Ref[IO, Long], map: Ref[IO, Map[String, String]]
   override def applyRead: PartialFunction[ReadCommand[_], IO[Any]] = { case GetCommand(key) =>
     for {
       items <- map.get
-      _      = println(items)
     } yield items.get(key)
   }
 

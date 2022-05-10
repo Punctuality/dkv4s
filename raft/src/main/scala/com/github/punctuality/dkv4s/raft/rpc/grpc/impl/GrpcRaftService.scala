@@ -1,16 +1,14 @@
 package com.github.punctuality.dkv4s.raft.rpc.grpc.impl
 
 import cats.effect.Async
-import cats.syntax.functor._
-import cats.syntax.flatMap._
 import cats.syntax.applicativeError._
+import cats.syntax.functor._
 import com.github.punctuality.dkv4s.raft.Raft
-import com.github.punctuality.dkv4s.raft.model.{Command, LogEntry, Node, Snapshot}
-import com.github.punctuality.dkv4s.raft.protocol.{AppendEntries, ClusterConfiguration, InstallSnapshot, VoteRequest}
+import com.github.punctuality.dkv4s.raft.model.{Command, Node}
+import com.github.punctuality.dkv4s.raft.protocol._
 import com.github.punctuality.dkv4s.raft.rpc.grpc.serializer.ProtoSerializer
-import com.github.punctuality.dkv4s.raft.util.Logger
-import com.github.punctuality.raft.protocol._
 import com.github.punctuality.dkv4s.raft.rpc.grpc.transform.instances._
+import com.github.punctuality.dkv4s.raft.util.Logger
 import io.grpc.Metadata
 import io.scalaland.chimney.dsl._
 import raft.rpc

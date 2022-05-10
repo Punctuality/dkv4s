@@ -4,15 +4,12 @@ import cats.effect.Deferred
 import cats.effect.Concurrent
 import cats.implicits._
 import cats.{Applicative, Monad, MonadError}
-import com.github.punctuality.dkv4s.raft.model.{Command, Configuration, JointConfigurationCommand, NewConfigurationCommand, Node, ReadCommand, WriteCommand}
-import com.github.punctuality.dkv4s.raft.node.{FollowerNode, LeaderNode, NodeState}
-import com.github.punctuality.dkv4s.raft.protocol.{Action, AnnounceLeader, AppendEntries, AppendEntriesResponse, ClusterConfiguration, CommitLogs, InstallSnapshot, JointClusterConfiguration, ReplicateLog, RequestForVote, ResetLeaderAnnouncer, StoreState, VoteRequest, VoteResponse}
-import com.github.punctuality.dkv4s.raft.service.{ClusterConfigStorage, ErrorLogging, LeaderAnnouncer, Log, LogPropagator, RpcClientManager}
+import com.github.punctuality.dkv4s.raft.model._
+import com.github.punctuality.dkv4s.raft.node._
+import com.github.punctuality.dkv4s.raft.protocol._
+import com.github.punctuality.dkv4s.raft.service._
 import com.github.punctuality.dkv4s.raft.storage.Storage
 import com.github.punctuality.dkv4s.raft.util.Logger
-import com.github.punctuality.raft.service._
-import com.github.punctuality.raft.protocol._
-import com.github.punctuality.raft.node._
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
@@ -63,7 +60,7 @@ abstract class Raft[F[_]: Concurrent] extends ErrorLogging[F] {
         node   <- getCurrentState
         _      <- if (node.leader.isDefined) Monad[F].unit else runElection()
         _      <- scheduleElection()
-        _      <- scheduleReplication()
+        _      <- scheduleHeartbeat()
         _      <- logger.trace("Waiting for the leader to be elected.")
         leader <- leaderAnnouncer.listen()
         _      <- logger.info(s"A Leader is elected. Leader: '$leader'")
@@ -80,7 +77,7 @@ abstract class Raft[F[_]: Concurrent] extends ErrorLogging[F] {
         node   <- getCurrentState
         _      <- if (node.leader.isDefined) Monad[F].unit else runElection()
         _      <- scheduleElection()
-        _      <- scheduleReplication()
+        _      <- scheduleHeartbeat()
         _      <- logger.trace("Waiting for the leader to be elected.")
         leader <- leaderAnnouncer.listen()
         _      <- logger.info(s"A Leader is elected. Leader: '$leader'")
@@ -156,7 +153,7 @@ abstract class Raft[F[_]: Concurrent] extends ErrorLogging[F] {
         localPreEntry <- log.get(msg.prevLogIndex)
         config        <- membershipManager.getClusterConfiguration
         result        <- modifyState(_.onEntries(logState, config, msg, localPreEntry))
-        _             <- updateLastHeartbeat
+        _             <- updateLastHeartbeat()
 
         (response, actions) = result
         _                  <- runActions(actions)
@@ -393,10 +390,11 @@ abstract class Raft[F[_]: Concurrent] extends ErrorLogging[F] {
       _        <- runActions(actions)
     } yield ()
 
-  private def scheduleReplication(): F[Unit] =
+  private def scheduleHeartbeat(): F[Unit] =
     background {
       schedule(FiniteDuration(config.heartbeatIntervalMillis, TimeUnit.MILLISECONDS)) {
         for {
+          _      <- Logger[F].trace("Sending heartbeat")
           node   <- getCurrentState
           config <- membershipManager.getClusterConfiguration
           actions = if (node.isInstanceOf[LeaderNode]) node.onReplicateLog(config) else List.empty

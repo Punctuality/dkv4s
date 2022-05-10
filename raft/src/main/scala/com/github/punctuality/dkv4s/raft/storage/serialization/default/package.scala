@@ -1,8 +1,6 @@
-package com.github.punctuality.raft.storage.serialization
+package com.github.punctuality.dkv4s.raft.storage.serialization
 
 import com.github.punctuality.dkv4s.raft.model.LogEntry
-import com.github.punctuality.dkv4s.raft.storage.serialization.{JavaSerializer, PersistedStateSerializer, Serializer}
-import com.github.punctuality.raft.model.LogEntry
 
 import java.nio.ByteBuffer
 import scala.util.Try

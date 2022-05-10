@@ -1,9 +1,6 @@
 package com.github.punctuality.dkv4s.raft.protocol
 
 import com.github.punctuality.dkv4s.raft.model.Node
-import com.github.punctuality.raft.model.Node
-
-import scala.collection.immutable.Set
 
 sealed trait ClusterConfiguration {
   def members: Set[Node]

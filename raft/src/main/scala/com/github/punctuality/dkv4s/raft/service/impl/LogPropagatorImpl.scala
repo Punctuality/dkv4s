@@ -4,10 +4,9 @@ import cats.effect.{Concurrent, Ref}
 import cats.syntax.flatMap._
 import cats.syntax.functor._
 import com.github.punctuality.dkv4s.raft.model.{Node, Snapshot}
-import com.github.punctuality.dkv4s.raft.protocol.{AppendEntriesResponse, InstallSnapshot}
+import com.github.punctuality.dkv4s.raft.protocol._
 import com.github.punctuality.dkv4s.raft.service.LogPropagator
 import com.github.punctuality.dkv4s.raft.util.Logger
-import com.github.punctuality.raft.protocol._
 
 import scala.collection.Set
 

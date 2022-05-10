@@ -1,8 +1,7 @@
 package com.github.punctuality.dkv4s.raft.node
 
-import com.github.punctuality.dkv4s.raft.model.{LogEntry, Node, PersistedState}
-import com.github.punctuality.dkv4s.raft.protocol.{Action, AppendEntries, AppendEntriesResponse, ClusterConfiguration, LogState, VoteRequest, VoteResponse}
-import com.github.punctuality.raft.protocol._
+import com.github.punctuality.dkv4s.raft.model._
+import com.github.punctuality.dkv4s.raft.protocol._
 
 /** Node state, describing current state and appropriate actions
   */

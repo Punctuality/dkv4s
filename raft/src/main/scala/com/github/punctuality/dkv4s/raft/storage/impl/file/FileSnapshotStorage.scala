@@ -3,13 +3,11 @@ package com.github.punctuality.dkv4s.raft.storage.impl.file
 import cats.effect.{Ref, Sync}
 import cats.syntax.flatMap._
 import cats.syntax.functor._
-import com.github.punctuality.dkv4s.raft.model
 import com.github.punctuality.dkv4s.raft.model.{Node, Snapshot}
 import com.github.punctuality.dkv4s.raft.protocol.{ClusterConfiguration, JointClusterConfiguration, NewClusterConfiguration}
 import com.github.punctuality.dkv4s.raft.service.ErrorLogging
 import com.github.punctuality.dkv4s.raft.storage.SnapshotStorage
 import com.github.punctuality.dkv4s.raft.util.Logger
-import com.github.punctuality.raft.model
 
 import java.nio
 import java.nio.charset.StandardCharsets
@@ -43,7 +41,7 @@ class FileSnapshotStorage[F[_]: Sync: Logger](path: Path, latestSnapshot: Ref[F,
       config <- Try(Files.readAllLines(path.resolve("snapshot_config")))
                   .map(_.asScala.toList)
                   .map(decodeConfig)
-    } yield model.Snapshot(lastIndex, bytebuffer, config)
+    } yield Snapshot(lastIndex, bytebuffer, config)
 
   protected def tryStoreInFileSystem(snapshot: Snapshot): Try[Path] = Try {
     Files.write(
@@ -59,7 +57,6 @@ class FileSnapshotStorage[F[_]: Sync: Logger](path: Path, latestSnapshot: Ref[F,
     Files.write(path.resolve("snapshot"), snapshot.bytes.array())
   }
 
-  // TODO Config loading seems a bit overdone and requires some abstraction
   protected def encodeConfig(config: ClusterConfiguration): List[String] =
     config match {
       case JointClusterConfiguration(oldMembers, newMembers) =>
