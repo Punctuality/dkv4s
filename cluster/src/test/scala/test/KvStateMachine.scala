@@ -1,15 +1,15 @@
 package test
 
 import cats.effect.{IO, Ref}
-import com.github.punctuality.raft.model.{ReadCommand, WriteCommand}
-import com.github.punctuality.raft.storage.StateMachine
+import com.github.punctuality.dkv4s.raft.model.{ReadCommand, WriteCommand}
+import com.github.punctuality.dkv4s.raft.storage.StateMachine
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.nio.ByteBuffer
 
 case class SetCommand(key: String, value: String) extends WriteCommand[String]
 case class DeleteCommand(key: String)             extends WriteCommand[Unit]
-case class GetCommand(key: String)                extends ReadCommand[String]
+case class GetCommand(key: String)                extends ReadCommand[Option[String]]
 
 class KvStateMachine(lastIndex: Ref[IO, Long], map: Ref[IO, Map[String, String]])
   extends StateMachine[IO] {
@@ -32,7 +32,7 @@ class KvStateMachine(lastIndex: Ref[IO, Long], map: Ref[IO, Map[String, String]]
     for {
       items <- map.get
       _      = println(items)
-    } yield items(key)
+    } yield items.get(key)
   }
 
   override def appliedIndex: IO[Long] = lastIndex.get

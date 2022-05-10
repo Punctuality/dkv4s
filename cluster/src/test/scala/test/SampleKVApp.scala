@@ -2,44 +2,83 @@ package test
 
 import cats.implicits._
 import cats.effect.{ExitCode, IO, IOApp, Resource}
-import com.github.punctuality.raft.Cluster
-import com.github.punctuality.raft.impl.RaftCluster
-import com.github.punctuality.raft.model._
-import com.github.punctuality.raft.protocol.ClusterConfiguration
-import com.github.punctuality.raft.rpc.grpc.serializer.{JavaProtoSerializer, ProtoSerializer}
-import com.github.punctuality.raft.rpc.grpc.{GrpcClientBuilder, GrpcServerBuilder}
-import com.github.punctuality.raft.storage.impl.memory.MemoryStorage
-import com.github.punctuality.raft.util.Logger
-import com.github.punctuality.raft.util.console.ConsoleLogger
+import com.github.punctuality.dkv4s.raft.Cluster
+import com.github.punctuality.dkv4s.raft.impl.RaftCluster
+import com.github.punctuality.dkv4s.raft.model.{Command, Configuration, Node}
+import com.github.punctuality.dkv4s.raft.protocol.ClusterConfiguration
+import com.github.punctuality.dkv4s.raft.rpc.grpc.serializer.{JavaProtoSerializer, ProtoSerializer}
+import com.github.punctuality.dkv4s.raft.rpc.grpc.{GrpcClientBuilder, GrpcServerBuilder}
+import com.github.punctuality.dkv4s.raft.storage.impl.memory.MemoryStorage
+import com.github.punctuality.dkv4s.raft.util.Logger
+import com.github.punctuality.dkv4s.raft.util.console.ConsoleLogger
+
+import scala.concurrent.duration._
 
 object SampleKVApp extends IOApp {
 
-  private val config = Configuration(Node("localhost", 8090), List.empty)
+  private val nodeCount = 3
+  private val nodes     = (1 to nodeCount).toList.map(i => Node("localhost", 8880 + i))
+  private val configs =
+    nodes.map(node =>
+      Configuration(
+        local                  = node,
+        members                = nodes.filter(_ != node),
+        electionMinDelayMillis = 100,
+        electionMaxDelayMillis = 600
+      )
+    )
 
-  implicit val logger: Logger[IO]                               = ConsoleLogger[IO](ConsoleLogger.Level.Trace)
-  implicit val commandSer: ProtoSerializer[Command[_]]          = JavaProtoSerializer.anySerObject
-  implicit val configSer: ProtoSerializer[ClusterConfiguration] = JavaProtoSerializer.anySerObject
-  implicit val objectSer: ProtoSerializer[Any]                  = JavaProtoSerializer.anySerObject
-
-  implicit val clientBuilder: GrpcClientBuilder[IO] = GrpcClientBuilder[IO]
-  implicit val serverBuilder: GrpcServerBuilder[IO] = GrpcServerBuilder[IO]
+  private val entriesCount = 2
+  private val entries      = (1 to entriesCount).toList.map(i => s"key$i" -> s"value$i")
 
   override def run(args: List[String]): IO[ExitCode] =
-    makeCluster(config).use { cluster =>
-      for {
-        leader <- cluster.start
-        _      <- IO(println(s"Election is completed. Leader is $leader"))
-        _      <- cluster.execute(SetCommand("key", "value"))
-        _      <- IO(println("Set command is executed"))
-        result <- cluster.execute(GetCommand("key"))
-        _      <- IO(println(s"Result of the get command is : $result"))
-      } yield ExitCode.Success
-    }
+    configs.zipWithIndex
+      .foldLeft(Resource.eval(List.empty[Cluster[IO]].pure[IO])) {
+        case (clusters, (config, index)) =>
+          for {
+            acc        <- clusters
+            curCluster <- makeCluster(s"${Emojis.randomEmoji} Cluster #${index + 1}", config)
+          } yield curCluster :: acc
+      }
+      .map(_.reverse)
+      .use(clusters =>
+        for {
+          leaders <- IO.parTraverseN(nodeCount)(clusters)(_.start)
+          _ <-
+            IO(
+              println(
+                s"💥💥💥 ️Election is completed. Leader is ${leaders.head} (unanimously: ${leaders
+                  .forall(_ == leaders.head)})"
+              )
+            )
+          _ <- entries.traverse { case (key, value) =>
+                 clusters.head.execute(SetCommand(key, value))
+               }
+          _ <- IO(println("💥💥💥 Set commands were executed"))
+          _ <- IO.sleep((configs.head.heartbeatIntervalMillis * 1.5).millis)
+          _ <- IO(println("💥💥💥 Retrieving results..."))
+          allResults <-
+            entries.traverse { case (key, _) =>
+              clusters.traverse(_.execute(GetCommand(key)))
+            }
+          _ <- IO(println(s"💥💥💥 Result of the get commands are:\n${allResults.mkString(",\n")}"))
+        } yield ExitCode.Success
+      )
 
-  private def makeCluster(config: Configuration): Resource[IO, Cluster[IO]] =
+  //noinspection SameParameterValue
+  private def makeCluster(name: String, config: Configuration): Resource[IO, Cluster[IO]] = {
+    implicit val logger: Logger[IO]                               = ConsoleLogger[IO](name, ConsoleLogger.Level.Trace)
+    implicit val commandSer: ProtoSerializer[Command[_]]          = JavaProtoSerializer.anySerObject
+    implicit val configSer: ProtoSerializer[ClusterConfiguration] = JavaProtoSerializer.anySerObject
+    implicit val objectSer: ProtoSerializer[Any]                  = JavaProtoSerializer.anySerObject
+
+    implicit val clientBuilder: GrpcClientBuilder[IO] = GrpcClientBuilder[IO]
+    implicit val serverBuilder: GrpcServerBuilder[IO] = GrpcServerBuilder[IO]
+
     for {
       stateMachine <- Resource.eval(KvStateMachine.empty)
       storage      <- Resource.eval(MemoryStorage.empty[IO])
       cluster      <- RaftCluster.resource(config, storage, stateMachine)
     } yield cluster
+  }
 }
