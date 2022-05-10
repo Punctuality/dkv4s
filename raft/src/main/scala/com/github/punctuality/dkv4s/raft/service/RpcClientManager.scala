@@ -5,13 +5,13 @@ import com.github.punctuality.dkv4s.raft.protocol._
 
 trait RpcClientManager[F[_]] {
 
-  def send(serverId: Node, voteRequest: VoteRequest): F[VoteResponse]
+  def sendVote(serverId: Node, voteRequest: VoteRequest): F[VoteResponse]
 
-  def send(serverId: Node, appendEntries: AppendEntries): F[AppendEntriesResponse]
+  def sendEntries(serverId: Node, appendEntries: AppendEntries): F[AppendEntriesResponse]
 
-  def send(serverId: Node, snapshot: InstallSnapshot): F[AppendEntriesResponse]
+  def sendSnapshot(serverId: Node, snapshot: InstallSnapshot): F[AppendEntriesResponse]
 
-  def send[T](serverId: Node, command: Command[T]): F[T]
+  def sendCommand[T](serverId: Node, command: Command[T]): F[T]
 
   def join(serverId: Node, newNode: Node): F[Boolean]
 

@@ -18,14 +18,14 @@ class RpcClientManagerImpl[F[_]: MonadThrow: RpcClientBuilder: Logger](
   val members: Seq[Node]
 ) extends ErrorLogging[F] with RpcClientManager[F] {
 
-  def send(serverId: Node, voteRequest: VoteRequest): F[VoteResponse] =
+  def sendVote(serverId: Node, voteRequest: VoteRequest): F[VoteResponse] =
     for {
       client  <- getClient(serverId)
       attempt <- client.send(voteRequest).attempt
       result  <- logErrors(serverId, attempt)
     } yield result
 
-  def send(serverId: Node, appendEntries: AppendEntries): F[AppendEntriesResponse] =
+  def sendEntries(serverId: Node, appendEntries: AppendEntries): F[AppendEntriesResponse] =
     errorLogging("Sending AppendEntries") {
       for {
         client  <- getClient(serverId)
@@ -36,14 +36,14 @@ class RpcClientManagerImpl[F[_]: MonadThrow: RpcClientBuilder: Logger](
       } yield result
     }
 
-  def send(serverId: Node, snapshot: InstallSnapshot): F[AppendEntriesResponse] =
+  def sendSnapshot(serverId: Node, snapshot: InstallSnapshot): F[AppendEntriesResponse] =
     for {
       client   <- getClient(serverId)
       attempt  <- client.send(snapshot).attempt
       response <- logErrors(serverId, attempt)
     } yield response
 
-  def send[T](serverId: Node, command: Command[T]): F[T] =
+  def sendCommand[T](serverId: Node, command: Command[T]): F[T] =
     for {
       client  <- getClient(serverId)
       attempt <- client.send(command).attempt

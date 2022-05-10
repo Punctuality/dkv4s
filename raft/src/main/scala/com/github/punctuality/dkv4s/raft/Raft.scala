@@ -246,14 +246,14 @@ abstract class Raft[F[_]: Concurrent] extends ErrorLogging[F] {
   def onCommand[T](command: Command[T]): F[T] =
     errorLogging("Receiving Command") {
       command match {
-        case command: ReadCommand[_] =>
+        case command: ReadCommand[T] =>
           for {
             _      <- logger.trace(s"A read comment received $command")
             state_ <- getCurrentState
             result <- onReadCommand(state_, command)
           } yield result
 
-        case command: WriteCommand[_] =>
+        case command: WriteCommand[T] =>
           for {
             deferred  <- Deferred[F, T]
             state_    <- getCurrentState
@@ -289,7 +289,7 @@ abstract class Raft[F[_]: Concurrent] extends ErrorLogging[F] {
           _        <- logger.trace("Read command has to be ran on the leader node")
           leader   <- leaderAnnouncer.listen()
           _        <- logger.trace(s"The current leader is $leader")
-          response <- clientProvider.send(leader, command)
+          response <- clientProvider.sendCommand(leader, command)
           _        <- logger.trace("Response for the read command received from the leader")
         } yield response
     }
@@ -319,7 +319,7 @@ abstract class Raft[F[_]: Concurrent] extends ErrorLogging[F] {
           _        <- logger.trace("Write commands should be forwarded to the leader node.")
           leader   <- leaderAnnouncer.listen()
           _        <- logger.trace(s"The current leader is $leader.")
-          response <- clientProvider.send(leader, command)
+          response <- clientProvider.sendCommand(leader, command)
           _        <- logger.trace("Response for the write command received from the leader")
           _        <- deferred.complete(response)
         } yield List.empty
@@ -334,7 +334,7 @@ abstract class Raft[F[_]: Concurrent] extends ErrorLogging[F] {
         background {
           for {
             _        <- logger.trace(s"Sending a vote request to $peerId. Request: $request")
-            response <- clientProvider.send(peerId, request)
+            response <- clientProvider.sendVote(peerId, request)
             _        <- onVoteResp(response)
           } yield response
         }

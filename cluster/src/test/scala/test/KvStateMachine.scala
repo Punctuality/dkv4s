@@ -1,37 +1,36 @@
 package test
 
 import cats.effect.{IO, Ref}
+import cats.syntax.traverse._
 import com.github.punctuality.dkv4s.raft.model.{ReadCommand, WriteCommand}
 import com.github.punctuality.dkv4s.raft.storage.StateMachine
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.nio.ByteBuffer
 
-case class SetCommand(key: String, value: String) extends WriteCommand[String]
-case class DeleteCommand(key: String)             extends WriteCommand[Unit]
-case class GetCommand(key: String)                extends ReadCommand[Option[String]]
+case class SetCommand(key: String, value: String)         extends WriteCommand[String]
+case class SetManyCommand(values: List[(String, String)]) extends WriteCommand[Unit]
+case class DeleteCommand(key: String)                     extends WriteCommand[Unit]
+case class GetCommand(key: String)                        extends ReadCommand[Option[String]]
 
 class KvStateMachine(lastIndex: Ref[IO, Long], map: Ref[IO, Map[String, String]])
   extends StateMachine[IO] {
 
   override def applyWrite: PartialFunction[(Long, WriteCommand[_]), IO[Any]] = {
     case (index, SetCommand(key, value)) =>
-      for {
-        _ <- map.update(_ + (key -> value))
-        _ <- lastIndex.set(index)
-      } yield value
+      map.update(_ + (key -> value)) >> lastIndex.set(index) as value
+
+    case (index, SetManyCommand(values)) =>
+      values.traverse { case (key, value) =>
+        map.update(_ + (key -> value))
+      } >> lastIndex.set(index)
 
     case (index, DeleteCommand(key)) =>
-      for {
-        _ <- map.update(_.removed(key))
-        _ <- lastIndex.set(index)
-      } yield ()
+      map.update(_.removed(key)) >> lastIndex.set(index)
   }
 
   override def applyRead: PartialFunction[ReadCommand[_], IO[Any]] = { case GetCommand(key) =>
-    for {
-      items <- map.get
-    } yield items.get(key)
+    map.get.map(_.get(key))
   }
 
   override def appliedIndex: IO[Long] = lastIndex.get

@@ -19,7 +19,7 @@ object SampleKVApp extends IOApp {
 
   private def pickRandom[A](seq: Seq[A]): A = seq(new Random().between(0, seq.size))
 
-  private val nodeCount = 9
+  private val nodeCount = 5
   private val nodes     = (1 to nodeCount).toList.map(i => Node("localhost", 8880 + i))
   private val configs =
     nodes.map(node =>
@@ -27,11 +27,11 @@ object SampleKVApp extends IOApp {
         local                  = node,
         members                = nodes.filter(_ != node),
         electionMinDelayMillis = 100,
-        electionMaxDelayMillis = 600
+        electionMaxDelayMillis = 400
       )
     )
 
-  private val entriesCount = 1000
+  private val entriesCount = 100000
   private val entries      = (1 to entriesCount).toList.map(i => s"key$i" -> s"value$i")
 
   override def run(args: List[String]): IO[ExitCode] =
@@ -54,9 +54,15 @@ object SampleKVApp extends IOApp {
                   .forall(_ == leaders.head)})"
               )
             )
-          _ <- entries.traverse { case (key, value) =>
-                 pickRandom(clusters).execute(SetCommand(key, value))
-               }
+//          _ <- fs2.Stream
+//                 .emits(entries)
+//                 .evalMap { case (key, value) =>
+//                   pickRandom(clusters).execute(SetCommand(key, value))
+//                 }
+//                 .metered(50.millis)
+//                 .compile
+//                 .drain
+          _ <- pickRandom(clusters).execute(SetManyCommand(entries))
           _ <- IO(println("💥💥💥 Set commands were executed"))
           _ <- IO.sleep((configs.head.heartbeatIntervalMillis * 1.5).millis)
           _ <- IO(println("💥💥💥 Retrieving results..."))

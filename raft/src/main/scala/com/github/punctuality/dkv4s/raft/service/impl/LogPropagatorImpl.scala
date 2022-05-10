@@ -24,7 +24,7 @@ class LogPropagatorImpl[F[_]: Concurrent: Logger](leaderId: Node,
       _        <- Logger[F].trace(s"Latest snapshot: $snapshot")
       response <-
         if (snapshot.exists(_.lastIndex >= nextIndex)) sendSnapshot(peerId, snapshot.get)
-        else log.getAppendEntries(leaderId, term, nextIndex).flatMap(clients.send(peerId, _))
+        else log.getAppendEntries(leaderId, term, nextIndex).flatMap(clients.sendEntries(peerId, _))
     } yield response
 
   private def sendSnapshot(peerId: Node, snapshot: Snapshot): F[AppendEntriesResponse] = {
@@ -32,7 +32,7 @@ class LogPropagatorImpl[F[_]: Concurrent: Logger](leaderId: Node,
       _        <- Logger[F].trace(s"Installing an Snapshot for peer $peerId, snapshot: $snapshot")
       _        <- installingRef.update(_ + peerId)
       logEntry <- log.get(snapshot.lastIndex).map(_.get)
-      response <- clients.send(peerId, InstallSnapshot(snapshot, logEntry))
+      response <- clients.sendSnapshot(peerId, InstallSnapshot(snapshot, logEntry))
       _        <- Logger[F].trace(s"Response after installing snapshot $response")
       _        <- installingRef.update(_ - peerId)
     } yield response
