@@ -2,6 +2,7 @@ package test
 
 import cats.implicits._
 import cats.effect.{ExitCode, IO, IOApp, Resource}
+import com.github.punctuality.dkv4s.cluster.util.Emojis
 import com.github.punctuality.dkv4s.raft.Cluster
 import com.github.punctuality.dkv4s.raft.impl.RaftCluster
 import com.github.punctuality.dkv4s.raft.model.{Command, Configuration, Node}

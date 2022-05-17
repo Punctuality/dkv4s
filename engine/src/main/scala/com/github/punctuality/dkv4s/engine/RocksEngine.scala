@@ -17,7 +17,7 @@ final class RocksEngine[F[_]: Async](val dbRef: Ref[F, (RocksDB, F[Unit])],
                                      stopWorld: Ref[F, Deferred[F, Unit]]
 ) {
   private def withPermission[T](f: RocksDB => F[T]): F[T] =
-    dbRef.get.map(_._1).flatMap(rdb => stopWorld.get.flatMap(_.get) >> f(rdb))
+    dbRef.get.flatMap(rdb => stopWorld.get.flatMap(_.get) >> f(rdb._1))
   private val revokePermission: Resource[F, RocksDB] =
     Resource
       .make(Deferred[F, Unit].flatMap(stopWorld.set).void)(_ => stopWorld.get.map(_.complete(())))
@@ -145,6 +145,9 @@ final class RocksEngine[F[_]: Async](val dbRef: Ref[F, (RocksDB, F[Unit])],
 
   def hotSwap(newDB: Resource[F, RocksDB]): F[Unit] =
     newDB.allocated.flatMap(dbRef.getAndSet(_).flatMap(_._2))
+
+  def close: F[Unit] =
+    dbRef.get.flatMap(_._2)
 }
 
 object RocksEngine {
