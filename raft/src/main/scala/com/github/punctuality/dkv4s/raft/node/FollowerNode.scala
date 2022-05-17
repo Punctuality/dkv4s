@@ -3,21 +3,26 @@ package com.github.punctuality.dkv4s.raft.node
 import com.github.punctuality.dkv4s.raft.model.{LogEntry, Node, PersistedState}
 import com.github.punctuality.dkv4s.raft.protocol._
 
-case class FollowerNode(currentNode: Node,
+case class FollowerNode(raftId: Int,
+                        currentNode: Node,
                         currentTerm: Long,
                         votedFor: Option[Node]      = None,
                         currentLeader: Option[Node] = None
 ) extends NodeState {
 
   override def onElectionTimer(logState: LogState,
-                               config: ClusterConfiguration
+                               config: ClusterConfiguration,
+                               allowed: Boolean
   ): (NodeState, List[Action]) =
-    CandidateNode(currentNode, currentTerm, logState.lastLogTerm.getOrElse(0L))
-      .onElectionTimer(logState, config) match {
-      case result @ (_: LeaderNode, _)                 => result
-      case (state, actions) if currentLeader.isDefined => state -> (ResetLeaderAnnouncer :: actions)
-      case otherResult                                 => otherResult
-    }
+    if (allowed)
+      CandidateNode(raftId, currentNode, currentTerm, logState.lastLogTerm.getOrElse(0L))
+        .onElectionTimer(logState, config, allowed) match {
+        case result @ (_: LeaderNode, _) => result
+        case (state, actions) if currentLeader.isDefined =>
+          state -> (ResetLeaderAnnouncer :: actions)
+        case otherResult => otherResult
+      }
+    else (this, List.empty)
 
   override def onVoteRequest(logState: LogState,
                              config: ClusterConfiguration,
@@ -32,12 +37,13 @@ case class FollowerNode(currentNode: Node,
 
     if (logOK && termOK)
       this.copy(currentTerm = msg.term, votedFor = Some(msg.nodeId)) -> (VoteResponse(
+        raftId,
         currentNode,
         msg.term,
         voteGranted = true
       ) -> List(StoreState))
     else
-      this -> (VoteResponse(currentNode, currentTerm, voteGranted = false) -> List.empty)
+      this -> (VoteResponse(raftId, currentNode, currentTerm, voteGranted = false) -> List.empty)
   }
 
   override def onVoteResponse(logState: LogState,
@@ -53,6 +59,7 @@ case class FollowerNode(currentNode: Node,
   ): (NodeState, (AppendEntriesResponse, List[Action])) =
     if (msg.term < currentTerm) {
       this -> (AppendEntriesResponse(
+        raftId,
         currentNode,
         currentTerm,
         msg.prevLogIndex,
@@ -71,6 +78,7 @@ case class FollowerNode(currentNode: Node,
 
         if (msg.prevLogIndex > 0 && localPrevLogEntry.isEmpty)
           nextState -> (AppendEntriesResponse(
+            raftId,
             currentNode,
             msg.term,
             msg.prevLogIndex,
@@ -78,6 +86,7 @@ case class FollowerNode(currentNode: Node,
           ) -> actions)
         else if (localPrevLogEntry.isDefined && localPrevLogEntry.get.term != msg.prevLogTerm)
           nextState -> (AppendEntriesResponse(
+            raftId,
             currentNode,
             msg.term,
             msg.prevLogIndex,
@@ -85,6 +94,7 @@ case class FollowerNode(currentNode: Node,
           ) -> actions)
         else
           nextState -> (AppendEntriesResponse(
+            raftId,
             currentNode,
             msg.term,
             msg.prevLogIndex + msg.entries.length,
@@ -106,6 +116,7 @@ case class FollowerNode(currentNode: Node,
 
         if (msg.prevLogIndex > 0 && localPrevLogEntry.isEmpty)
           nextState -> (AppendEntriesResponse(
+            raftId,
             currentNode,
             msg.term,
             msg.prevLogIndex,
@@ -113,6 +124,7 @@ case class FollowerNode(currentNode: Node,
           ) -> actions)
         else if (localPrevLogEntry.isDefined && localPrevLogEntry.get.term != msg.prevLogTerm) {
           nextState -> (AppendEntriesResponse(
+            raftId,
             currentNode,
             msg.term,
             msg.prevLogIndex,
@@ -120,6 +132,7 @@ case class FollowerNode(currentNode: Node,
           ) -> actions)
         } else
           nextState -> (AppendEntriesResponse(
+            raftId,
             currentNode,
             msg.term,
             msg.prevLogIndex + msg.entries.length,
@@ -146,6 +159,7 @@ case class FollowerNode(currentNode: Node,
                                    config: ClusterConfiguration
   ): (NodeState, AppendEntriesResponse) =
     this -> AppendEntriesResponse(
+      raftId,
       currentNode,
       currentTerm,
       logState.lastLogIndex - 1,

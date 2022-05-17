@@ -3,6 +3,8 @@ package com.github.punctuality.dkv4s.engine.codec
 import cats.Functor
 import cats.effect.Sync
 import cats.syntax.functor._
+import scodec.Codec
+import scodec.bits.BitVector
 
 import java.nio.charset.StandardCharsets
 
@@ -20,4 +22,7 @@ object Decoder {
 
   implicit def stringDec[F[_]: Sync]: Decoder[F, String] =
     (bytes: Array[Byte]) => Sync[F].delay(Option(bytes).map(new String(_, StandardCharsets.UTF_8)))
+
+  implicit def scodecDec[F[_]: Sync, N: Codec]: Decoder[F, N] = (data: Array[Byte]) =>
+    Sync[F].delay(Codec[N].decode(BitVector(data)).map(_.value).toOption)
 }

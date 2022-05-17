@@ -9,16 +9,19 @@ import java.nio.ByteBuffer
 trait StateMachine[F[_]] {
   // TODO Think about this partial function and Any types
 
+  type WriteHandler = PartialFunction[(Long, WriteCommand[_]), F[_]]
+  type ReadHandler  = PartialFunction[ReadCommand[_], F[_]]
+
   /** Partially defined handler for [[WriteCommand]]
     *
     * @return Result of writing command
     */
-  def applyWrite: PartialFunction[(Long, WriteCommand[_]), F[Any]]
+  def applyWrite: WriteHandler
 
   /** Partially defined handler for [[ReadCommand]]
     * @return Result of reading command
     */
-  def applyRead: PartialFunction[ReadCommand[_], F[Any]]
+  def applyRead: ReadHandler
 
   /** @return Index of last applied log
     */

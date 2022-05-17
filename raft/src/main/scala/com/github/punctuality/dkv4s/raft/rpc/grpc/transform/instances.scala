@@ -1,5 +1,7 @@
 package com.github.punctuality.dkv4s.raft.rpc.grpc.transform
 
+import cats.effect.Sync
+import cats.syntax.functor._
 import com.github.punctuality.dkv4s.raft.model.{Command, LogEntry, Node, Snapshot}
 import com.github.punctuality.dkv4s.raft.protocol._
 import com.github.punctuality.dkv4s.raft.rpc.grpc.serializer.ProtoSerializer
@@ -7,6 +9,7 @@ import io.scalaland.chimney._
 import io.scalaland.chimney.dsl._
 import com.google.protobuf.ByteString
 import raft.rpc
+import raft.rpc.InstallSnapshotRequest
 
 import java.nio.ByteBuffer
 
@@ -91,35 +94,71 @@ object instances {
       .withFieldComputed(_.nodeId, _.nodeId.id)
       .buildTransformer
 
-  implicit def protoSnapshotReq2Domain(implicit
-    commandSer: ProtoSerializer[Command[_]],
-    configSer: ProtoSerializer[ClusterConfiguration]
-  ): Transformer[rpc.InstallSnapshotRequest, InstallSnapshot] =
-    Transformer
-      .define[rpc.InstallSnapshotRequest, InstallSnapshot]
-      .withFieldComputed(
-        _.snapshot,
-        { case rpc.InstallSnapshotRequest(lastIndexId, _, bytes, config, _) =>
-          Snapshot(lastIndexId, ByteBuffer.wrap(bytes.toByteArray), configSer.decode(config))
-        }
-      )
-      .withFieldComputed(
-        _.lastEntry,
-        _.lastEntry.transformInto[rpc.LogEntry].transformInto[LogEntry]
-      )
-      .buildTransformer
+  private val snapLimit: Int = 1 << 20
+  type SnapshotStream[F[_]] = fs2.Stream[F, rpc.InstallSnapshotRequest]
 
-  implicit def snapshotReq2Proto(implicit
+  implicit def protoSnapshotReq2Domain[F[_]: Sync](implicit
     commandSer: ProtoSerializer[Command[_]],
     configSer: ProtoSerializer[ClusterConfiguration]
-  ): Transformer[InstallSnapshot, rpc.InstallSnapshotRequest] =
-    Transformer
-      .define[InstallSnapshot, rpc.InstallSnapshotRequest]
-      .withFieldComputed(_.lastIndexId, _.snapshot.lastIndex)
-      .withFieldComputed(_.bytes, req => ByteString.copyFrom(req.snapshot.bytes))
-      .withFieldComputed(_.config, req => configSer.encode(req.snapshot.config))
-      .buildTransformer
+  ): Transformer[SnapshotStream[F], F[InstallSnapshot]] =
+    (src: SnapshotStream[F]) =>
+      src.compile
+        .fold(List.empty[ByteString] -> Option.empty[InstallSnapshot]) {
+          case (
+                (buffers, None),
+                rpc.InstallSnapshotRequest(-1, -1, None, snapshotChunk, ByteString.EMPTY, _)
+              ) =>
+            (buffers :+ snapshotChunk) -> None
+          case (
+                (buffers, None),
+                rpc
+                  .InstallSnapshotRequest(
+                    raftId,
+                    lastIndexId,
+                    lastEntry,
+                    ByteString.EMPTY,
+                    config,
+                    _
+                  )
+              ) =>
+            buffers -> Some(
+              InstallSnapshot(
+                raftId,
+                Snapshot(lastIndexId, null, configSer.decode(config)),
+                lastEntry.transformInto[rpc.LogEntry].transformInto[LogEntry]
+              )
+            )
+        }
+        .map { case (buffers, Some(snapshotToFill)) =>
+          val newBB = ByteBuffer.allocate(buffers.map(_.size).sum)
+          buffers.foreach(binStr => newBB.put(binStr.asReadOnlyByteBuffer()))
+          snapshotToFill.copy(snapshot = snapshotToFill.snapshot.copy(bytes = newBB))
+        }
+
+  implicit def snapshotReq2Proto[F[_]: Sync](implicit
+    commandSer: ProtoSerializer[Command[_]],
+    configSer: ProtoSerializer[ClusterConfiguration]
+  ): Transformer[InstallSnapshot, SnapshotStream[F]] = {
+    case InstallSnapshot(raftId, Snapshot(lastIndex, bytes, config), lastEntry) =>
+      val dataStream =
+        fs2.Stream
+          .chunk(fs2.Chunk.ByteBuffer(bytes.asReadOnlyBuffer()))
+          .chunkLimit(snapLimit)
+          .map(byteChunk => ByteString.copyFrom(byteChunk.toByteBuffer))
+          .map(rpc.InstallSnapshotRequest(-1, -1, None, _, ByteString.EMPTY))
+      val configStream = fs2.Stream.eval(
+        Sync[F].delay(
+          rpc.InstallSnapshotRequest(
+            raftId,
+            lastIndex,
+            Some(lastEntry.transformInto[rpc.LogEntry]),
+            ByteString.EMPTY,
+            configSer.encode(config)
+          )
+        )
+      )
+      dataStream ++ configStream
+  }
 
   implicit val joinReq2Node: Transformer[rpc.JoinRequest, Node] = Transformer.derive
-  implicit val node2JoinReq: Transformer[Node, rpc.JoinRequest] = Transformer.derive
 }

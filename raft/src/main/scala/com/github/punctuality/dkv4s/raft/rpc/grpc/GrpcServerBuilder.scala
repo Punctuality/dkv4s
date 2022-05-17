@@ -1,8 +1,7 @@
 package com.github.punctuality.dkv4s.raft.rpc.grpc
 
-import cats.effect.{Async, Sync}
+import cats.effect.Async
 import cats.syntax.functor._
-import com.github.punctuality.dkv4s.raft.Raft
 import com.github.punctuality.dkv4s.raft.model.{Command, Node}
 import com.github.punctuality.dkv4s.raft.protocol.ClusterConfiguration
 import com.github.punctuality.dkv4s.raft.rpc.grpc.impl.GrpcRaftService
@@ -14,13 +13,15 @@ import fs2.grpc.syntax.all._
 import io.grpc._
 import raft.rpc._
 
-class GrpcServerBuilder[F[_]: Async: Logger](implicit
+class GrpcServerBuilder[F[_]: Async](implicit
   commandSer: ProtoSerializer[Command[_]],
   configSer: ProtoSerializer[ClusterConfiguration],
   objectSer: ProtoSerializer[Any]
 ) extends RpcServerBuilder[F] {
-  override def build(node: Node, raft: Raft[F]): F[RpcServer[F]] =
-    GrpcServerBuilder.construct(new GrpcRaftService[F](raft), node.port)
+  override def build(node: Node, rafts: RpcServerBuilder.RaftMap[F])(implicit
+    L: Logger[F]
+  ): F[RpcServer[F]] =
+    GrpcServerBuilder.construct(new GrpcRaftService[F](rafts), node.port)
 }
 
 object GrpcServerBuilder {
@@ -37,7 +38,7 @@ object GrpcServerBuilder {
         }
       }
 
-  def apply[F[_]: Async: Logger](implicit
+  def apply[F[_]: Async](implicit
     commandSer: ProtoSerializer[Command[_]],
     configSer: ProtoSerializer[ClusterConfiguration],
     objectSer: ProtoSerializer[Any]

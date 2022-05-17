@@ -5,34 +5,42 @@ import cats.syntax.flatMap._
 import cats.syntax.functor._
 import com.github.punctuality.dkv4s.raft.model.{Node, Snapshot}
 import com.github.punctuality.dkv4s.raft.protocol._
-import com.github.punctuality.dkv4s.raft.service.LogPropagator
+import com.github.punctuality.dkv4s.raft.service.{Log, LogPropagator, RpcClientManager}
+import com.github.punctuality.dkv4s.raft.storage.StateMachine
 import com.github.punctuality.dkv4s.raft.util.Logger
 
 import scala.collection.Set
 
 class LogPropagatorImpl[F[_]: Concurrent: Logger](leaderId: Node,
-                                                  log: LogImpl[F],
-                                                  clients: RpcClientManagerImpl[F],
+                                                  log: Log[F, StateMachine],
+                                                  clients: RpcClientManager[F],
                                                   installingRef: Ref[F, Set[Node]]
 ) extends LogPropagator[F] {
 
-  def propagateLogs(peerId: Node, term: Long, nextIndex: Long): F[AppendEntriesResponse] =
+  def propagateLogs(raftId: Int,
+                    peerId: Node,
+                    term: Long,
+                    nextIndex: Long
+  ): F[AppendEntriesResponse] =
     for {
       _        <- Logger[F].trace(s"Replicating logs to $peerId. Term: $term, nextIndex: $nextIndex")
       _        <- snapshotIsNotInstalling(peerId)
       snapshot <- log.latestSnapshot
       _        <- Logger[F].trace(s"Latest snapshot: $snapshot")
       response <-
-        if (snapshot.exists(_.lastIndex >= nextIndex)) sendSnapshot(peerId, snapshot.get)
+        if (snapshot.exists(_.lastIndex >= nextIndex)) sendSnapshot(raftId, peerId, snapshot.get)
         else log.getAppendEntries(leaderId, term, nextIndex).flatMap(clients.sendEntries(peerId, _))
     } yield response
 
-  private def sendSnapshot(peerId: Node, snapshot: Snapshot): F[AppendEntriesResponse] = {
+  private def sendSnapshot(raftId: Int,
+                           peerId: Node,
+                           snapshot: Snapshot
+  ): F[AppendEntriesResponse] = {
     val response = for {
       _        <- Logger[F].trace(s"Installing an Snapshot for peer $peerId, snapshot: $snapshot")
       _        <- installingRef.update(_ + peerId)
       logEntry <- log.get(snapshot.lastIndex).map(_.get)
-      response <- clients.sendSnapshot(peerId, InstallSnapshot(snapshot, logEntry))
+      response <- clients.sendSnapshot(peerId, InstallSnapshot(raftId, snapshot, logEntry))
       _        <- Logger[F].trace(s"Response after installing snapshot $response")
       _        <- installingRef.update(_ - peerId)
     } yield response
@@ -53,8 +61,8 @@ class LogPropagatorImpl[F[_]: Concurrent: Logger](leaderId: Node,
 
 object LogPropagatorImpl {
   def build[F[_]: Concurrent: Logger](leaderId: Node,
-                                      clients: RpcClientManagerImpl[F],
-                                      log: LogImpl[F]
+                                      clients: RpcClientManager[F],
+                                      log: Log[F, StateMachine]
   ): F[LogPropagatorImpl[F]] =
     Ref.of[F, Set[Node]](Set.empty).map(new LogPropagatorImpl[F](leaderId, log, clients, _))
 }

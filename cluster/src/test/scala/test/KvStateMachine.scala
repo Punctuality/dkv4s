@@ -1,7 +1,10 @@
 package test
 
-import cats.effect.{IO, Ref}
+import cats.effect.Ref
+import cats.effect.kernel.Async
 import cats.syntax.traverse._
+import cats.syntax.flatMap._
+import cats.syntax.functor._
 import com.github.punctuality.dkv4s.raft.model.{ReadCommand, WriteCommand}
 import com.github.punctuality.dkv4s.raft.storage.StateMachine
 
@@ -13,10 +16,10 @@ case class SetManyCommand(values: List[(String, String)]) extends WriteCommand[U
 case class DeleteCommand(key: String)                     extends WriteCommand[Unit]
 case class GetCommand(key: String)                        extends ReadCommand[Option[String]]
 
-class KvStateMachine(lastIndex: Ref[IO, Long], map: Ref[IO, Map[String, String]])
-  extends StateMachine[IO] {
+class KvStateMachine[F[_]: Async](lastIndex: Ref[F, Long], map: Ref[F, Map[String, String]])
+  extends StateMachine[F] {
 
-  override def applyWrite: PartialFunction[(Long, WriteCommand[_]), IO[Any]] = {
+  override def applyWrite: WriteHandler = {
     case (index, SetCommand(key, value)) =>
       map.update(_ + (key -> value)) >> lastIndex.set(index) as value
 
@@ -29,20 +32,20 @@ class KvStateMachine(lastIndex: Ref[IO, Long], map: Ref[IO, Map[String, String]]
       map.update(_.removed(key)) >> lastIndex.set(index)
   }
 
-  override def applyRead: PartialFunction[ReadCommand[_], IO[Any]] = { case GetCommand(key) =>
+  override def applyRead: ReadHandler = { case GetCommand(key) =>
     map.get.map(_.get(key))
   }
 
-  override def appliedIndex: IO[Long] = lastIndex.get
+  override def appliedIndex: F[Long] = lastIndex.get
 
-  override def takeSnapshot: IO[(Long, ByteBuffer)] =
+  override def takeSnapshot: F[(Long, ByteBuffer)] =
     for {
       items <- map.get
       index <- lastIndex.get
       bytes  = serialize(items)
     } yield (index, bytes)
 
-  override def restoreSnapshot(index: Long, bytes: ByteBuffer): IO[Unit] =
+  override def restoreSnapshot(index: Long, bytes: ByteBuffer): F[Unit] =
     for {
       _ <- map.set(deserialize(bytes))
       _ <- lastIndex.set(index)
@@ -69,9 +72,9 @@ class KvStateMachine(lastIndex: Ref[IO, Long], map: Ref[IO, Map[String, String]]
 }
 
 object KvStateMachine {
-  def empty: IO[KvStateMachine] =
+  def empty[F[_]: Async]: F[KvStateMachine[F]] =
     for {
-      index <- Ref.of[IO, Long](0L)
-      map   <- Ref.of[IO, Map[String, String]](Map.empty)
+      index <- Ref.of[F, Long](0L)
+      map   <- Ref.of[F, Map[String, String]](Map.empty)
     } yield new KvStateMachine(index, map)
 }

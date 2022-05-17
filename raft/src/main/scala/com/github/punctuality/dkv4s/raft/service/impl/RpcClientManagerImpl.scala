@@ -21,7 +21,7 @@ class RpcClientManagerImpl[F[_]: MonadThrow: RpcClientBuilder: Logger](
   def sendVote(serverId: Node, voteRequest: VoteRequest): F[VoteResponse] =
     for {
       client  <- getClient(serverId)
-      attempt <- client.send(voteRequest).attempt
+      attempt <- client.sendVote(voteRequest).attempt
       result  <- logErrors(serverId, attempt)
     } yield result
 
@@ -30,7 +30,7 @@ class RpcClientManagerImpl[F[_]: MonadThrow: RpcClientBuilder: Logger](
       for {
         client  <- getClient(serverId)
         _       <- Logger[F].trace(s"Sending request $appendEntries to $serverId client")
-        attempt <- client.send(appendEntries).attempt
+        attempt <- client.sendEntries(appendEntries).attempt
         _       <- Logger[F].trace(s"Attempt $attempt")
         result  <- logErrors(serverId, attempt)
       } yield result
@@ -39,21 +39,21 @@ class RpcClientManagerImpl[F[_]: MonadThrow: RpcClientBuilder: Logger](
   def sendSnapshot(serverId: Node, snapshot: InstallSnapshot): F[AppendEntriesResponse] =
     for {
       client   <- getClient(serverId)
-      attempt  <- client.send(snapshot).attempt
+      attempt  <- client.sendSnapshot(snapshot).attempt
       response <- logErrors(serverId, attempt)
     } yield response
 
-  def sendCommand[T](serverId: Node, command: Command[T]): F[T] =
+  def sendCommand[T](serverId: Node, raftId: Int, command: Command[T]): F[T] =
     for {
       client  <- getClient(serverId)
-      attempt <- client.send(command).attempt
+      attempt <- client.sendCommand(raftId, command).attempt
       result  <- logErrors(serverId, attempt)
     } yield result
 
-  def join(serverId: Node, newNode: Node): F[Boolean] =
+  def join(serverId: Node, raftId: Int, newNode: Node): F[Boolean] =
     for {
       client  <- getClient(serverId)
-      attempt <- client.join(newNode).attempt
+      attempt <- client.join(raftId, newNode).attempt
       result  <- logErrors(serverId, attempt)
     } yield result
 

@@ -11,9 +11,9 @@ trait RpcClientManager[F[_]] {
 
   def sendSnapshot(serverId: Node, snapshot: InstallSnapshot): F[AppendEntriesResponse]
 
-  def sendCommand[T](serverId: Node, command: Command[T]): F[T]
+  def sendCommand[T](serverId: Node, raftId: Int, command: Command[T]): F[T]
 
-  def join(serverId: Node, newNode: Node): F[Boolean]
+  def join(serverId: Node, raftId: Int, newNode: Node): F[Boolean]
 
   def closeConnections(): F[Unit]
 

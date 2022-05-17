@@ -7,13 +7,15 @@ import com.github.punctuality.dkv4s.raft.storage._
 
 /** Log entity. Stores events, manages state, applies commands
   */
-trait Log[F[_]] {
+trait Log[F[_], +SM[X[_]] <: StateMachine[X]] {
+
+  val raftId: Int
 
   val logStorage: LogStorage[F]
 
   val snapshotStorage: SnapshotStorage[F]
 
-  val stateMachine: StateMachine[F]
+  val stateMachine: SM[F]
 
   val clusterConfigStorage: ClusterConfigStorage[F]
 

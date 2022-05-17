@@ -13,13 +13,13 @@ import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder
 import fs2.grpc.syntax.all._
 import raft.rpc.RaftFs2Grpc
 
-class GrpcClientBuilder[F[_]: Async: Logger](implicit
+class GrpcClientBuilder[F[_]: Async](implicit
   commandSer: ProtoSerializer[Command[_]],
   configSer: ProtoSerializer[ClusterConfiguration],
   objectSer: ProtoSerializer[Any]
 ) extends RpcClientBuilder[F] {
 
-  override def build(address: Node): F[RpcClient[F]] =
+  override def build(address: Node)(implicit L: Logger[F]): F[RpcClient[F]] =
     GrpcClientBuilder
       .mkStub(address.host, address.port)
       .allocated
@@ -35,7 +35,7 @@ object GrpcClientBuilder {
       .resource[F]
       .flatMap(RaftFs2Grpc.stubResource[F](_))
 
-  def apply[F[_]: Async: Logger](implicit
+  def apply[F[_]: Async](implicit
     commandSer: ProtoSerializer[Command[_]],
     configSer: ProtoSerializer[ClusterConfiguration],
     objectSer: ProtoSerializer[Any]

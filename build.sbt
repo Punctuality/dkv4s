@@ -4,8 +4,9 @@ ThisBuild / scalaVersion := "2.13.8"
 lazy val common = Seq(
   compilerPlugin("org.typelevel" % "kind-projector"     % "0.13.2" cross CrossVersion.full),
   compilerPlugin("com.olegpy"   %% "better-monadic-for" % "0.3.1"),
-  "org.typelevel" %% "cats-effect" % "3.3.11",
-  "co.fs2"        %% "fs2-core"    % "3.2.7"
+  "org.typelevel" %% "cats-effect"      % "3.3.11",
+  "co.fs2"        %% "fs2-core"         % "3.2.7",
+  "org.scodec"     % "scodec-core_2.13" % "1.11.9"
 )
 
 lazy val engine = (project in file("engine"))
@@ -18,7 +19,6 @@ lazy val raft = (project in file("raft"))
       "co.fs2"       %% "fs2-core"          % "3.2.7",
       "co.fs2"       %% "fs2-io"            % "3.2.7",
       "co.fs2"       %% "fs2-scodec"        % "3.2.7",
-      "org.scodec"    % "scodec-core_2.13"  % "1.11.9",
       "io.scalaland" %% "chimney"           % "0.6.1",
       "com.beachape" %% "enumeratum"        % "1.7.0",
       "com.beachape" %% "enumeratum-cats"   % "1.7.0"

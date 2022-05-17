@@ -15,15 +15,16 @@ import com.github.punctuality.dkv4s.raft.util.Logger
 
 import scala.collection.concurrent.TrieMap
 
-class LogImpl[F[_]: MonadCancel[*[_], Throwable]: Logger](
+class LogImpl[F[_]: MonadCancel[*[_], Throwable]: Logger, +SM[X[_]] <: StateMachine[X]](
+  val raftId: Int,
   val logStorage: LogStorage[F],
   val snapshotStorage: SnapshotStorage[F],
-  val stateMachine: StateMachine[F],
+  val stateMachine: SM[F],
   val clusterConfigStorage: ClusterConfigStorage[F],
   val compactionPolicy: LogCompactionPolicy[F],
   commitIndexRef: Ref[F, Long],
   semaphore: Semaphore[F]
-) extends Log[F] {
+) extends Log[F, SM] {
 
   // TODO Deal with this Any type
   private val awaitingCommands = TrieMap[Long, Deferred[F, Any]]()
@@ -81,7 +82,7 @@ class LogImpl[F[_]: MonadCancel[*[_], Throwable]: Logger](
       entries     <- (nextIndex to lastIndex).toList.traverse(i => logStorage.get(i).map(_.get))
       prevLogIndex = lastEntry.map(_.index).getOrElse(0L)
       prevLogTerm  = lastEntry.map(_.term).getOrElse(0L)
-    } yield AppendEntries(leaderId, term, prevLogIndex, prevLogTerm, commitIndex, entries)
+    } yield AppendEntries(raftId, leaderId, term, prevLogIndex, prevLogTerm, commitIndex, entries)
 
   def append[T](term: Long, command: Command[T], deferred: Deferred[F, T]): F[LogEntry] =
     transactional {
@@ -232,17 +233,20 @@ class LogImpl[F[_]: MonadCancel[*[_], Throwable]: Logger](
 }
 
 object LogImpl {
-  def build[F[_]: Concurrent: Logger](logStorage: LogStorage[F],
-                                      snapshotStorage: SnapshotStorage[F],
-                                      stateMachine: StateMachine[F],
-                                      compactionPolicy: LogCompactionPolicy[F],
-                                      membershipManager: ClusterConfigStorage[F],
-                                      lastCommitIndex: Long
-  ): F[LogImpl[F]] =
+  def build[F[_]: Concurrent: Logger, SM[X[_]] <: StateMachine[X]](
+    raftId: Int,
+    logStorage: LogStorage[F],
+    snapshotStorage: SnapshotStorage[F],
+    stateMachine: SM[F],
+    compactionPolicy: LogCompactionPolicy[F],
+    membershipManager: ClusterConfigStorage[F],
+    lastCommitIndex: Long
+  ): F[LogImpl[F, SM]] =
     for {
       lock           <- Semaphore[F](1)
       commitIndexRef <- Ref.of[F, Long](lastCommitIndex)
     } yield new LogImpl(
+      raftId,
       logStorage,
       snapshotStorage,
       stateMachine,

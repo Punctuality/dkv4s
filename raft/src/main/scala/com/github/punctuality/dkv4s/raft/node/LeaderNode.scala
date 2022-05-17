@@ -3,14 +3,16 @@ package com.github.punctuality.dkv4s.raft.node
 import com.github.punctuality.dkv4s.raft.model.{LogEntry, Node, PersistedState}
 import com.github.punctuality.dkv4s.raft.protocol._
 
-case class LeaderNode(currrentNode: Node,
+case class LeaderNode(raftId: Int,
+                      currrentNode: Node,
                       currentTerm: Long,
                       matchIndex: Map[Node, Long],
                       nextIndex: Map[Node, Long]
 ) extends NodeState {
 
   override def onElectionTimer(logState: LogState,
-                               config: ClusterConfiguration
+                               config: ClusterConfiguration,
+                               allowed: Boolean
   ): (NodeState, List[Action]) =
     (this, List.empty)
 
@@ -24,7 +26,8 @@ case class LeaderNode(currrentNode: Node,
     val termOK = msg.term > currentTerm
 
     if (logOK && termOK)
-      FollowerNode(currrentNode, msg.term, Some(msg.nodeId)) -> (VoteResponse(
+      FollowerNode(raftId, currrentNode, msg.term, Some(msg.nodeId)) -> (VoteResponse(
+        raftId,
         currrentNode,
         msg.term,
         voteGranted = true
@@ -34,6 +37,7 @@ case class LeaderNode(currrentNode: Node,
       val matchIndex_ = matchIndex + (msg.nodeId -> msg.lastLogIndex)
 
       this.copy(nextIndex = nextIndex_, matchIndex = matchIndex_) -> (VoteResponse(
+        raftId,
         currrentNode,
         currentTerm,
         voteGranted = false
@@ -54,6 +58,7 @@ case class LeaderNode(currrentNode: Node,
   ): (NodeState, (AppendEntriesResponse, List[Action])) =
     if (msg.term < currentTerm) {
       this -> (AppendEntriesResponse(
+        raftId,
         currrentNode,
         currentTerm,
         msg.prevLogIndex,
@@ -61,11 +66,13 @@ case class LeaderNode(currrentNode: Node,
       ) -> List.empty)
     } else if (msg.term > currentTerm) {
 
-      val nextState = FollowerNode(currrentNode, msg.term, currentLeader = Some(msg.leaderId))
-      val actions   = List(StoreState, AnnounceLeader(msg.leaderId, resetPrevious = true))
+      val nextState =
+        FollowerNode(raftId, currrentNode, msg.term, currentLeader = Some(msg.leaderId))
+      val actions = List(StoreState, AnnounceLeader(msg.leaderId, resetPrevious = true))
 
       if (msg.prevLogIndex > 0 && localPrvLogEntry.isEmpty)
         nextState -> (AppendEntriesResponse(
+          raftId,
           currrentNode,
           msg.term,
           msg.prevLogIndex,
@@ -73,6 +80,7 @@ case class LeaderNode(currrentNode: Node,
         ) -> actions)
       else if (localPrvLogEntry.isDefined && localPrvLogEntry.get.term != msg.prevLogTerm)
         nextState -> (AppendEntriesResponse(
+          raftId,
           currrentNode,
           msg.term,
           msg.prevLogIndex,
@@ -80,6 +88,7 @@ case class LeaderNode(currrentNode: Node,
         ) -> actions)
       else
         nextState -> (AppendEntriesResponse(
+          raftId,
           currrentNode,
           msg.term,
           msg.prevLogIndex + msg.entries.length,
@@ -87,11 +96,13 @@ case class LeaderNode(currrentNode: Node,
         ) -> actions)
     } else {
 
-      val nextState = FollowerNode(currrentNode, msg.term, currentLeader = Some(msg.leaderId))
-      val actions   = List(StoreState, AnnounceLeader(msg.leaderId, resetPrevious = true))
+      val nextState =
+        FollowerNode(raftId, currrentNode, msg.term, currentLeader = Some(msg.leaderId))
+      val actions = List(StoreState, AnnounceLeader(msg.leaderId, resetPrevious = true))
 
       if (msg.prevLogTerm > 0 && localPrvLogEntry.isEmpty)
         nextState -> (AppendEntriesResponse(
+          raftId,
           currrentNode,
           msg.term,
           msg.prevLogIndex,
@@ -99,6 +110,7 @@ case class LeaderNode(currrentNode: Node,
         ) -> actions)
       else if (localPrvLogEntry.isDefined && localPrvLogEntry.get.term != msg.prevLogTerm) {
         nextState -> (AppendEntriesResponse(
+          raftId,
           currrentNode,
           msg.term,
           msg.prevLogIndex,
@@ -106,6 +118,7 @@ case class LeaderNode(currrentNode: Node,
         ) -> actions)
       } else
         nextState -> (AppendEntriesResponse(
+          raftId,
           currrentNode,
           msg.term,
           msg.prevLogIndex + msg.entries.length,
@@ -118,7 +131,7 @@ case class LeaderNode(currrentNode: Node,
                              msg: AppendEntriesResponse
   ): (NodeState, List[Action]) =
     if (msg.currentTerm > currentTerm) {
-      FollowerNode(currrentNode, msg.currentTerm, None, None) -> List(
+      FollowerNode(raftId, currrentNode, msg.currentTerm, None, None) -> List(
         StoreState,
         ResetLeaderAnnouncer
       )
@@ -160,9 +173,12 @@ case class LeaderNode(currrentNode: Node,
   override def onSnapshotInstalled(logState: LogState,
                                    cluster: ClusterConfiguration
   ): (NodeState, AppendEntriesResponse) =
-    (
-      this,
-      AppendEntriesResponse(currrentNode, currentTerm, logState.lastLogIndex - 1, success = false)
+    this -> AppendEntriesResponse(
+      raftId,
+      currrentNode,
+      currentTerm,
+      logState.lastLogIndex - 1,
+      success = false
     )
 
 }
