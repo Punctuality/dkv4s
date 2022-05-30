@@ -39,8 +39,8 @@ object SampleKVApp extends IOApp {
       )
     )
 
-  private val batchLimit   = 10_000
-  private val entriesCount = 1_000_000
+  private val batchLimit   = 7_500
+  private val entriesCount = 500_000
   private val entries      = fs2.Stream.range(1, entriesCount + 1).map(i => s"key$i" -> rndByteStr(5))
 
   override def run(args: List[String]): IO[ExitCode] =

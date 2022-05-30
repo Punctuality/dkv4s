@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+  redis-db:
+    image: redis:latest
+    ports:
+      - "6666:6379"
+
+  aerospike-db:
+    image: aerospike/aerospike-server:latest
+    environment:
+      - NAMESPACE=test
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+      - "3002:3002"

@@ -36,7 +36,13 @@ lazy val raft = (project in file("raft"))
 lazy val cluster = (project in file("cluster"))
   .settings(
     resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/releases",
-    libraryDependencies ++= Seq("com.storm-enroute" %% "scalameter" % "0.21") ++ common,
+    libraryDependencies ++= Seq(
+      "com.storm-enroute" %% "scalameter"         % "0.21"  % Test,
+      "dev.profunktor"    %% "redis4cats-effects" % "1.1.1" % Test,
+      "io.github.reugn"   %% "aerospike-core"     % "0.4.0" % Test,
+//      "com.github.pureconfig" %% "pureconfig"         % "0.17.1" % Test,
+      "com.aerospike" % "aerospike-client" % "6.0.0" % Test
+    ) ++ common,
     testFrameworks += new TestFramework("org.scalameter.ScalaMeterFramework"),
     Test / parallelExecution := false
   )
