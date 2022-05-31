@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package raft.rpc;
+
+service Raft {
+  rpc vote(VoteRequest) returns (VoteResponse) {}
+  rpc appendEntries(AppendEntriesRequest) returns (AppendEntriesResponse) {}
+  rpc execute(CommandRequest) returns (CommandResponse) {}
+  rpc installSnapshot(InstallSnapshotRequest) returns (AppendEntriesResponse) {}
+  rpc join(JoinRequest) returns (JoinResponse) {}
+}
+
+message InstallSnapshotRequest {
+  uint64 lastIndexId = 1;
+  LogEntry lastEntry = 2;
+  bytes bytes = 3;
+  bytes config = 4;
+}
+
+message CommandRequest {
+  bytes command = 1;
+}
+
+message CommandResponse {
+  bytes output = 1;
+}
+
+message VoteRequest {
+  string nodeId = 1;
+  uint64 currentTerm = 2;
+  uint64 logLength = 3;
+  uint64 logTerm = 4;
+}
+
+message VoteResponse {
+  string nodeId = 1;
+  uint64 term = 2;
+  bool granted = 3;
+}
+
+message AppendEntriesRequest {
+  string leaderId = 1;
+  uint64 term = 2;
+  uint64 logLength = 3;
+  uint64 logTerm = 4;
+  uint64 leaderCommit = 5;
+  repeated LogEntry entries = 6;
+}
+
+message LogEntry {
+  uint64 term = 1;
+  uint64 index = 2;
+  bytes command = 3;
+}
+
+message AppendEntriesResponse {
+  string nodeId = 1;
+  uint64 currentTerm = 2;
+  uint64 ack = 3;
+  bool success = 4;
+}
+
+message JoinRequest {
+  string host = 1;
+  int32 port = 2;
+}
+
+message JoinResponse {
+}
+
+message NodeInfo {
+  string host = 1;
+  int32 port = 2;
+}
+

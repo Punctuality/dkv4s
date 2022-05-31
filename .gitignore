@@ -9,5 +9,30 @@ target
 .idea
 out
 
+# VSCode specific
+.vscode/
+
+# Metals Specific
+.metals/
+.ammonite/
+metals.sbt
+metals/project/
+
 # MacOS Specific
 .DS_Store
+
+# Sbt specific
+.cache
+.history
+.lib/
+dist/*
+target/
+lib_managed/
+src_managed/
+project/boot/
+project/plugins/project/
+**/.bloop
+.bsp/
+
+# Project specific
+tmp/

@@ -6,7 +6,6 @@ import cats.syntax.functor._
 
 import java.nio.charset.StandardCharsets
 
-
 trait Decoder[F[_], A] {
   def decode(bytes: Array[Byte]): F[Option[A]]
 }
