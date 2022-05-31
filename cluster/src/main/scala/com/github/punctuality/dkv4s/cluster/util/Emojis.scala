@@ -1,4 +1,4 @@
-package test
+package com.github.punctuality.dkv4s.cluster.util
 
 import scala.util.Random
 
