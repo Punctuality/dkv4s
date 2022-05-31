@@ -2,6 +2,7 @@ package com.github.punctuality.dkv4s.engine.codec
 
 import cats.Contravariant
 import cats.effect.kernel.Sync
+import scodec.Codec
 
 import java.nio.charset.StandardCharsets
 
@@ -20,4 +21,15 @@ object Encoder {
 
   implicit def stringEnc[F[_]: Sync]: Encoder[F, String] =
     (data: String) => Sync[F].delay(data.getBytes(StandardCharsets.UTF_8))
+
+  implicit def scodecEnc[F[_]: Sync, N: Codec]: Encoder[F, N] =
+    (data: N) =>
+      Sync[F].defer(
+        Codec[N]
+          .encode(data)
+          .fold(
+            err => Sync[F].raiseError(new RuntimeException(err.messageWithContext)),
+            r => Sync[F].pure(r.toByteArray)
+          )
+      )
 }
